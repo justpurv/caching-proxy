@@ -21,11 +21,10 @@ public class CacheClient {
         HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         // status line
-        String statusLine = "HTTP/1.1 " + response.statusCode() + " OK\r\n";
+        String statusLine = "HTTP/1.1 " + response.statusCode() + "\r\n";
         output.write(statusLine.getBytes());
         // headers
         for (Map.Entry<String, List<String>> header : response.headers().map().entrySet()) {
-
             String headerLine =
                     header.getKey() + ": " +
                             String.join(",", header.getValue()) +
