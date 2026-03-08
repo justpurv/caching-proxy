@@ -5,6 +5,7 @@ import org.project.cacheclient.CacheClient;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 
@@ -39,13 +40,21 @@ public class CachingApplication {
                 socket = serverSocket.accept();
                 BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 String requestLine = reader.readLine();
+                if (requestLine == null) {
+                    socket.close();
+                    continue;
+                }
                 String[] parts = requestLine.split(" ");
                 String method = parts[0];
                 String path = parts[1];
                 System.out.println("Method : " + method);
                 System.out.println("Path : " + path);
-                String response = client.getResponse(origin, path);
-                System.out.println(response);
+                // response is will be stored in this variable
+                byte[] response = client.getResponse(origin, path);
+                OutputStream outputStream = socket.getOutputStream();
+                outputStream.write(response);
+                outputStream.flush();
+                socket.close();
             } catch (IOException | InterruptedException e) {
                 System.out.println("There were some problems with connecting to client : " + e.getMessage());
             }
