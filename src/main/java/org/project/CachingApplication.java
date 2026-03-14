@@ -52,9 +52,11 @@ public class CachingApplication {
                 // response is will be stored in this variable
                 byte[] response = client.getResponse(origin, path);
                 OutputStream outputStream = socket.getOutputStream();
+                System.out.println("writing response to the socekt");
                 outputStream.write(response);
+                System.out.println("written response : "+response.toString());
                 outputStream.flush();
-                socket.close();
+                System.out.println("listening for other request...");
             } catch (IOException | InterruptedException e) {
                 System.out.println("There were some problems with connecting to client : " + e.getMessage());
             }
