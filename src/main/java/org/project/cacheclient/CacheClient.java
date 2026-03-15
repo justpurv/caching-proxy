@@ -37,4 +37,19 @@ public class CacheClient {
         output.write(response.body());
         return output.toByteArray();
     }
+
+    public byte[] addCahceHeader(byte[] response , String value){
+       String responseString = new String(response); 
+       int headerIndex = responseString.indexOf("\r\n\r\n");
+
+       if(headerIndex == -1){
+           return response;
+       }
+
+       String header = responseString.substring(0, headerIndex);
+       String body = responseString.substring(headerIndex);
+       String newHeader = header + "\r\nX-Cache: " + value;
+       String finalReponse = newHeader + body;
+       return finalReponse.getBytes();
+    }
 }

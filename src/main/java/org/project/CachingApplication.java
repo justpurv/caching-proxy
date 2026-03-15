@@ -62,12 +62,14 @@ public class CachingApplication {
                 // response is will be stored in this variable
                 byte[] response; 
                 if(store.contains(cacheKey)){
-                    System.out.println("CACHE_HIT");
+                    System.out.println("CACHE_HIT :");
                     response = store.get(cacheKey);
+                    response = client.addCahceHeader(response, "HIT"); 
                 }else{
-                    System.out.println("CACHE_MISS");
+                    System.out.println("CACHE_MISS : ");
                     response = client.getResponse(origin, path);
                     store.put(cacheKey, response);
+                    response = client.addCahceHeader(response, "MISS"); 
                 }
                 OutputStream outputStream = socket.getOutputStream();
                 System.out.println("writing response to the socekt");
