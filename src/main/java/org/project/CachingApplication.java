@@ -10,7 +10,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 
 public class CachingApplication {
-    static void main(String[] args) {
+    public static void main(String[] args) {
         int port = 0;
         String origin = null;
         CacheClient client = new CacheClient();
