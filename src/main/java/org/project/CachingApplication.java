@@ -24,7 +24,7 @@ public class CachingApplication {
                 origin = args[i + 1];
             }
         }
-        System.out.println("Starting Proxy Server...");
+        System.out.println("Starting proxy server...");
         System.out.println("Port: " + port);
         System.out.println("Origin: " + origin);
 
