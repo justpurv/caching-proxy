@@ -44,7 +44,7 @@ public class CachingApplication {
             Socket socket = null;
             try {
                 socket = serverSocket.accept();
-                System.out.println("Client Connected : " + socket.getInetAddress());
+                System.out.println("Client connected : " + socket.getInetAddress());
                 BufferedReader reader =
                         new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 String requestLine = reader.readLine();
@@ -72,7 +72,7 @@ public class CachingApplication {
                     response = client.addCahceHeader(response, "MISS"); 
                 }
                 OutputStream outputStream = socket.getOutputStream();
-                System.out.println("writing response to the socekt");
+                System.out.println("Writing response to the socekt");
                 outputStream.write(response);
                 outputStream.flush();
                 socket.close();
