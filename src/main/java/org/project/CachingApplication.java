@@ -41,28 +41,31 @@ public class CachingApplication {
                             + port
                             + " : "
                             + e.getMessage());
+            return;
         }
         boolean running = true;
         while (running) {
-            Socket socket = null;
-            try {
-                socket = serverSocket.accept();
+            try (Socket socket = serverSocket.accept()) {
                 System.out.println("Client connected : " + socket.getInetAddress());
                 BufferedReader reader =
                         new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 String requestLine = reader.readLine();
                 if (requestLine == null || requestLine.isBlank()) {
-                    socket.close();
                     continue;
                 }
                 String[] parts = requestLine.trim().split("\\s+");
                 if (parts.length < 2) {
                     writeSimpleResponse(socket.getOutputStream(), 400, "Bad Request");
-                    socket.close();
                     continue;
                 }
                 String method = parts[0];
-                String path = normalizePath(parts[1]);
+                String path;
+                try {
+                    path = normalizePath(parts[1]);
+                } catch (IllegalArgumentException invalidRequestTarget) {
+                    writeSimpleResponse(socket.getOutputStream(), 400, "Bad Request");
+                    continue;
+                }
                 String cacheKey = origin + path;
                 System.out.println("key : " +cacheKey);
                 System.out.println("Method : " + method);
@@ -74,9 +77,18 @@ public class CachingApplication {
                     response = client.addCacheHeader(response, "HIT");
                 }else{
                     System.out.println("CACHE_MISS : ");
-                    response = client.getResponse(origin, path);
-                    store.put(cacheKey, response);
-                    response = client.addCacheHeader(response, "MISS");
+                    try {
+                        response = client.getResponse(origin, path);
+                        store.put(cacheKey, response);
+                        response = client.addCacheHeader(response, "MISS");
+                    } catch (IOException | InterruptedException upstreamFailure) {
+                        if (upstreamFailure instanceof InterruptedException) {
+                            Thread.currentThread().interrupt();
+                        }
+                        System.out.println("Upstream request failed: " + upstreamFailure.getMessage());
+                        writeSimpleResponse(socket.getOutputStream(), 502, "Bad Gateway");
+                        continue;
+                    }
                 }
                 OutputStream outputStream = socket.getOutputStream();
                 System.out.println("Writing response to the socekt");
@@ -84,8 +96,7 @@ public class CachingApplication {
                     responseStream.transferTo(outputStream);
                 }
                 outputStream.flush();
-                socket.close();
-            } catch (IOException | InterruptedException e) {
+            } catch (IOException e) {
                 System.out.println(
                         "There were some problems with connecting to client : " + e.getMessage());
             }

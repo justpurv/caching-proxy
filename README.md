@@ -7,12 +7,13 @@ It now supports binary-safe responses (for example JSON, images, PDFs) by handli
 ## Features
 
 - Simple proxy server over `ServerSocket`
-- In-memory cache using `ConcurrentHashMap`
+- In-memory cache with LRU eviction (default max size: `100` entries)
 - Cache status header:
   - `X-Cache: MISS` for first request
   - `X-Cache: HIT` for cached request
 - Binary-safe response handling (no body corruption for non-text content)
 - Graceful handling for malformed request lines (`400 Bad Request`)
+- Upstream failure handling (`502 Bad Gateway`) to avoid hanging client connections
 
 ## Project Structure
 
@@ -21,7 +22,9 @@ It now supports binary-safe responses (for example JSON, images, PDFs) by handli
 - `src/main/java/org/project/cacheclient/CacheClient.java`
   - Calls origin server, builds raw HTTP response bytes, injects `X-Cache` header safely
 - `src/main/java/org/project/cache/CacheStore.java`
-  - Thread-safe in-memory key-value store (`Map<String, byte[]>`)
+  - Thread-safe in-memory LRU cache store (`Map<String, byte[]>`) with max-size eviction
+- `src/test/java/org/project/cache/CacheStoreTest.java`
+  - Verifies LRU eviction and recency update behavior
 - `src/test/java/org/project/cacheclient/CacheClientTest.java`
   - Verifies header injection preserves binary body bytes
 
@@ -56,6 +59,7 @@ Arguments:
 4. If key does not exist:
    - fetch from origin
    - store full response bytes in cache
+   - if cache exceeds max size, least-recently-used entry is evicted
    - return response + `X-Cache: MISS`
 5. Response bytes are streamed to socket output.
 
@@ -108,7 +112,8 @@ Expected `file` output to identify it as a PDF document.
 
 ## Notes and Limitations
 
-- Cache is in-memory only and unbounded (no eviction policy yet).
+- Cache is in-memory only (no persistence across process restart).
+- LRU cache max size is currently fixed to `100` entries in code.
 - Cache key is `origin + path` only.
 - Request handling is minimal (primarily GET use case).
 - Does not forward client request headers/body.
@@ -116,7 +121,7 @@ Expected `file` output to identify it as a PDF document.
 
 ## Next Improvements
 
-- Add cache eviction (`LRU`, TTL, max size)
+- Add TTL-based cache expiry and configurable cache max size (for example via CLI args)
 - Stream-to-disk cache for very large payloads
 - Support more HTTP methods and request headers
 - Add structured logging and metrics
