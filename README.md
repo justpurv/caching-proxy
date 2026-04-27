@@ -14,6 +14,7 @@ It now supports binary-safe responses (for example JSON, images, PDFs) by handli
 - Binary-safe response handling (no body corruption for non-text content)
 - Graceful handling for malformed request lines (`400 Bad Request`)
 - Upstream failure handling (`502 Bad Gateway`) to avoid hanging client connections
+- Structured logging with `SLF4J` + `Logback` (key-value fields)
 
 ## Project Structure
 
@@ -27,6 +28,8 @@ It now supports binary-safe responses (for example JSON, images, PDFs) by handli
   - Verifies LRU eviction and recency update behavior
 - `src/test/java/org/project/cacheclient/CacheClientTest.java`
   - Verifies header injection preserves binary body bytes
+- `src/main/resources/logback.xml`
+  - Console logging pattern for structured key-value logs
 
 ## Requirements
 
@@ -49,6 +52,16 @@ Arguments:
 
 - `--port`: local proxy port
 - `--origin`: upstream base URL
+
+## Logging
+
+The application uses `SLF4J` with `Logback` and emits structured key-value logs.
+
+Example log line:
+
+```text
+2026-04-27T16:19:54.559+05:30 level=INFO logger=org.project.CachingApplication thread=... msg="cache lookup" cache_status="MISS" cache_key="https://jsonplaceholder.typicode.com/photos"
+```
 
 ## How It Works
 
@@ -124,5 +137,5 @@ Expected `file` output to identify it as a PDF document.
 - Add TTL-based cache expiry and configurable cache max size (for example via CLI args)
 - Stream-to-disk cache for very large payloads
 - Support more HTTP methods and request headers
-- Add structured logging and metrics
+- Add cache and request metrics (hit ratio, latency, error rates)
 - Add integration tests with embedded origin server
