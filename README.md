@@ -8,6 +8,7 @@ It now supports binary-safe responses (for example JSON, images, PDFs) by handli
 
 - Simple proxy server over `ServerSocket`
 - In-memory cache with LRU eviction (default max size: `100` entries)
+- Configurable POST cache allowlist via CLI (`--cacheable-post-paths`)
 - Cache status header:
   - `X-Cache: MISS` for first request
   - `X-Cache: HIT` for cached request
@@ -21,7 +22,7 @@ It now supports binary-safe responses (for example JSON, images, PDFs) by handli
 - `src/main/java/org/project/CachingApplication.java`
   - Entry point, socket accept loop, request parsing, cache decision, response write
 - `src/main/java/org/project/cacheclient/CacheClient.java`
-  - Calls origin server, builds raw HTTP response bytes, injects `X-Cache` header safely
+  - Calls origin server (GET/POST), forwards selected headers/body, builds raw HTTP response bytes, injects `X-Cache` header safely
 - `src/main/java/org/project/cache/CacheStore.java`
   - Thread-safe in-memory LRU cache store (`Map<String, byte[]>`) with max-size eviction
 - `src/test/java/org/project/cache/CacheStoreTest.java`
@@ -52,6 +53,7 @@ Arguments:
 
 - `--port`: local proxy port
 - `--origin`: upstream base URL
+- `--cacheable-post-paths`: comma-separated POST paths that are cacheable (example: `/posts,/search`)
 
 ## Logging
 
@@ -66,7 +68,9 @@ Example log line:
 ## How It Works
 
 1. Client connects to proxy and sends request line.
-2. Proxy extracts request target path and builds cache key as `origin + path`.
+2. Proxy extracts request target path and builds cache key:
+   - `GET`: `origin + path`
+   - cacheable `POST`: `origin + path + "#body-sha256=<hash>"`
 3. If key exists in cache:
    - return cached response + `X-Cache: HIT`
 4. If key does not exist:
@@ -90,7 +94,30 @@ Expected:
 - First response includes `X-Cache: MISS`
 - Second response includes `X-Cache: HIT`
 
-### 2) Image endpoint
+### 2) POST endpoint (allowlist + body hash cache key)
+
+Start server with POST allowlist:
+
+```bash
+mvn -q exec:java -Dexec.mainClass=org.project.CachingApplication -Dexec.args="--port 8080 --origin https://jsonplaceholder.typicode.com --cacheable-post-paths /posts"
+```
+
+Run same POST twice:
+
+```bash
+curl -i -X POST http://localhost:8080/posts -H 'Content-Type: application/json' -d '{"title":"alpha","body":"one","userId":1}'
+curl -i -X POST http://localhost:8080/posts -H 'Content-Type: application/json' -d '{"title":"alpha","body":"one","userId":1}'
+```
+
+Expected:
+
+- First response includes `X-Cache: MISS`
+- Second response includes `X-Cache: HIT`
+- Changing request body should produce a new `MISS` (different body hash key)
+
+Note: `jsonplaceholder.typicode.com` is a mock API; `POST` responses are not persisted in subsequent `GET /posts` origin results.
+
+### 3) Image endpoint
 
 Run server against an image-capable origin:
 
@@ -106,7 +133,7 @@ curl -i http://localhost:8080/image/png -o /tmp/proxy-image-2.png
 cmp /tmp/proxy-image-1.png /tmp/proxy-image-2.png && echo "binary match"
 ```
 
-### 3) PDF endpoint
+### 4) PDF endpoint
 
 Run server against a PDF-capable origin:
 
@@ -127,9 +154,9 @@ Expected `file` output to identify it as a PDF document.
 
 - Cache is in-memory only (no persistence across process restart).
 - LRU cache max size is currently fixed to `100` entries in code.
-- Cache key is `origin + path` only.
+- Cache key is `origin + path` for `GET`; cacheable `POST` adds SHA-256 hash of request body.
 - Request handling is minimal (primarily GET use case).
-- Does not forward client request headers/body.
+- For upstream forwarding, currently forwards request body and selected headers (`content-type`, `accept`).
 - Single-process local proxy, intended as a learning/simple caching server.
 
 ## Next Improvements

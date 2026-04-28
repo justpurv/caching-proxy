@@ -9,6 +9,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -17,11 +18,29 @@ public class CacheClient {
     private static final byte[] HEADER_SEPARATOR = new byte[] {'\r', '\n', '\r', '\n'};
 
     public CacheClient() {
-        client = HttpClient.newHttpClient();
+        client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     }
 
     public byte[] getResponse(String origin, String path) throws IOException, InterruptedException {
-        HttpRequest request = HttpRequest.newBuilder().uri(URI.create(origin + path)).GET().build();
+        return getResponse(origin, path, "GET", new byte[0], Map.of());
+    }
+
+    public byte[] getResponse(
+            String origin, String path, String method, byte[] requestBody, Map<String, String> headers)
+            throws IOException, InterruptedException {
+        HttpRequest.Builder requestBuilder =
+                HttpRequest.newBuilder()
+                        .uri(URI.create(origin + path))
+                        .timeout(Duration.ofSeconds(15));
+        if ("POST".equalsIgnoreCase(method)) {
+            byte[] body = requestBody == null ? new byte[0] : requestBody;
+            requestBuilder.POST(HttpRequest.BodyPublishers.ofByteArray(body));
+        } else {
+            requestBuilder.GET();
+        }
+
+        copyForwardableHeaders(requestBuilder, headers);
+        HttpRequest request = requestBuilder.build();
         HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         // status line
@@ -42,6 +61,23 @@ public class CacheClient {
             bodyStream.transferTo(output);
         }
         return output.toByteArray();
+    }
+
+    private void copyForwardableHeaders(HttpRequest.Builder requestBuilder, Map<String, String> headers) {
+        if (headers == null || headers.isEmpty()) {
+            return;
+        }
+        // Keep forwarding conservative; avoid hop-by-hop and Host headers.
+        copyHeaderIfPresent(requestBuilder, headers, "content-type");
+        copyHeaderIfPresent(requestBuilder, headers, "accept");
+    }
+
+    private void copyHeaderIfPresent(
+            HttpRequest.Builder requestBuilder, Map<String, String> headers, String headerName) {
+        String value = headers.get(headerName);
+        if (value != null && !value.isBlank()) {
+            requestBuilder.header(headerName, value);
+        }
     }
 
     public byte[] addCacheHeader(byte[] response, String value) {
