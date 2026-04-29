@@ -5,10 +5,9 @@ import org.project.cacheclient.CacheClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -32,6 +31,7 @@ import java.util.Set;
 public class CachingApplication {
     private static final Logger logger = LoggerFactory.getLogger(CachingApplication.class);
     private static final String CACHEABLE_POST_PATHS_ARG = "--cacheable-post-paths";
+    private static final String CACHE_MAX_SIZE_ARG = "--cache-max-size";
     private static final String PORT = "--port";
     private static final String ORIGIN = "--origin";
 
@@ -51,9 +51,9 @@ public class CachingApplication {
     public static void main(String[] args) {
         int port = 0;
         String origin = null;
+        int cacheMaxSize = 100;
         Set<String> cacheablePostPaths = Collections.emptySet();
         CacheClient client = new CacheClient();
-        CacheStore store = new CacheStore();
 
         for (int i = 0; i < args.length; i++) {
             if (PORT.equals(args[i]) && i + 1 < args.length) {
@@ -65,12 +65,17 @@ public class CachingApplication {
             if (CACHEABLE_POST_PATHS_ARG.equals(args[i]) && i + 1 < args.length) {
                 cacheablePostPaths = parseCacheablePostPaths(args[i + 1]);
             }
+            if (CACHE_MAX_SIZE_ARG.equals(args[i]) && i + 1 < args.length) {
+                cacheMaxSize = parseCacheMaxSize(args[i + 1]);
+            }
         }
+        CacheStore store = new CacheStore(cacheMaxSize);
         logger.info(
-                "starting proxy server port={} origin={} cacheable_post_paths={}",
+                "starting proxy server port={} origin={} cacheable_post_paths={} cache_max_size={}",
                 port,
                 origin,
-                cacheablePostPaths);
+                cacheablePostPaths,
+                cacheMaxSize);
 
         ServerSocket serverSocket = null;
         try {
@@ -84,9 +89,8 @@ public class CachingApplication {
         while (running) {
             try (Socket socket = serverSocket.accept()) {
                 logger.info("client connected client_ip={}", socket.getInetAddress());
-                BufferedReader reader =
-                        new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                String requestLine = reader.readLine();
+                InputStream clientInput = socket.getInputStream();
+                String requestLine = readLine(clientInput);
                 if (requestLine == null || requestLine.isBlank()) {
                     logger.warn("empty request line");
                     continue;
@@ -97,7 +101,7 @@ public class CachingApplication {
                     writeSimpleResponse(socket.getOutputStream(), 400, "Bad Request");
                     continue;
                 }
-                Map<String, String> headers = readHeaders(reader);
+                Map<String, String> headers = readHeaders(clientInput);
                 String method = parts[0];
                 String path;
                 try {
@@ -111,12 +115,12 @@ public class CachingApplication {
                     continue;
                 }
                 boolean cacheable = isCacheable(method, path, cacheablePostPaths);
-                byte[] requestBody = readRequestBody(reader, headers);
+                byte[] requestBody = readRequestBody(clientInput, headers);
                 String cacheKey = buildCacheKey(origin, path, method, cacheable, requestBody);
                 boolean postBodyHashedKey = cacheable && "POST".equalsIgnoreCase(method);
                 logger.info(
                         "request received method={} path={} cache_key={} cacheable={}"
-                            + " request_body_bytes={} post_body_hashed_key={}",
+                                + " request_body_bytes={} post_body_hashed_key={}",
                         method,
                         path,
                         cacheKey,
@@ -209,14 +213,14 @@ public class CachingApplication {
      *
      * <p>Header names are normalized to lowercase. Reading stops at the first blank line.
      *
-     * @param reader buffered reader positioned after the request line
+     * @param input client input stream positioned after the request line
      * @return map of header name to value
      * @throws IOException if stream reading fails
      */
-    private static Map<String, String> readHeaders(BufferedReader reader) throws IOException {
+    private static Map<String, String> readHeaders(InputStream input) throws IOException {
         Map<String, String> headers = new HashMap<>();
         String line;
-        while ((line = reader.readLine()) != null) {
+        while ((line = readLine(input)) != null) {
             if (line.isBlank()) {
                 break;
             }
@@ -235,14 +239,14 @@ public class CachingApplication {
      * Reads request body bytes based on {@code Content-Length}.
      *
      * <p>If {@code Content-Length} is missing, invalid, or non-positive, an empty byte array is
-     * returned. Body text is decoded from chars and re-encoded as UTF-8 bytes for downstream usage.
+     * returned. Body is read as exact bytes from the input stream.
      *
-     * @param reader buffered reader positioned after headers
+     * @param input input stream positioned after headers
      * @param headers parsed request headers
      * @return request body bytes, or empty when not available
      * @throws IOException if stream reading fails
      */
-    private static byte[] readRequestBody(BufferedReader reader, Map<String, String> headers)
+    private static byte[] readRequestBody(InputStream input, Map<String, String> headers)
             throws IOException {
         String contentLengthValue = headers.get("content-length");
         if (contentLengthValue == null) {
@@ -260,10 +264,10 @@ public class CachingApplication {
             logger.info("request body not present content_length={}", contentLength);
             return new byte[0];
         }
-        char[] bodyChars = new char[contentLength];
+        byte[] bodyBytes = new byte[contentLength];
         int offset = 0;
         while (offset < contentLength) {
-            int read = reader.read(bodyChars, offset, contentLength - offset);
+            int read = input.read(bodyBytes, offset, contentLength - offset);
             if (read == -1) {
                 break;
             }
@@ -276,7 +280,12 @@ public class CachingApplication {
                     offset);
         }
         logger.info("request body read bytes={}", offset);
-        return new String(bodyChars, 0, offset).getBytes(StandardCharsets.UTF_8);
+        if (offset == contentLength) {
+            return bodyBytes;
+        }
+        byte[] partial = new byte[offset];
+        System.arraycopy(bodyBytes, 0, partial, 0, offset);
+        return partial;
     }
 
     /**
@@ -322,6 +331,61 @@ public class CachingApplication {
             paths.add(trimmed.startsWith("/") ? trimmed : "/" + trimmed);
         }
         return paths;
+    }
+
+    /**
+     * Parses cache max-size CLI value.
+     *
+     * <p>Falls back to {@code 100} when value is invalid or non-positive.
+     *
+     * @param rawValue raw CLI argument
+     * @return validated max cache size
+     */
+    private static int parseCacheMaxSize(String rawValue) {
+        try {
+            int parsed = Integer.parseInt(rawValue);
+            if (parsed <= 0) {
+                logger.warn("invalid cache max size value={} falling_back=100", rawValue);
+                return 100;
+            }
+            return parsed;
+        } catch (NumberFormatException invalidValue) {
+            logger.warn("invalid cache max size value={} falling_back=100", rawValue);
+            return 100;
+        }
+    }
+
+    /**
+     * Reads one HTTP line from stream and strips trailing line terminator.
+     *
+     * @param input source input stream
+     * @return decoded ISO-8859-1 line, or {@code null} on EOF with no bytes read
+     * @throws IOException if stream reading fails
+     */
+    private static String readLine(InputStream input) throws IOException {
+        ByteArrayOutputStream line = new ByteArrayOutputStream();
+        int current;
+        while ((current = input.read()) != -1) {
+            if (current == '\r') {
+                int next = input.read();
+                if (next == '\n') {
+                    break;
+                }
+                line.write(current);
+                if (next != -1) {
+                    line.write(next);
+                }
+                continue;
+            }
+            if (current == '\n') {
+                break;
+            }
+            line.write(current);
+        }
+        if (current == -1 && line.size() == 0) {
+            return null;
+        }
+        return line.toString(StandardCharsets.ISO_8859_1);
     }
 
     /**

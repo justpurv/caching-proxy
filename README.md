@@ -8,6 +8,7 @@ It now supports binary-safe responses (for example JSON, images, PDFs) by handli
 
 - Simple proxy server over `ServerSocket`
 - In-memory cache with LRU eviction (default max size: `100` entries)
+- Configurable cache max size via CLI (`--cache-max-size`)
 - Configurable POST cache allowlist via CLI (`--cacheable-post-paths`)
 - Cache status header:
   - `X-Cache: MISS` for first request
@@ -20,7 +21,7 @@ It now supports binary-safe responses (for example JSON, images, PDFs) by handli
 ## Project Structure
 
 - `src/main/java/org/project/CachingApplication.java`
-  - Entry point, socket accept loop, request parsing, cache decision, response write
+  - Entry point, socket accept loop, byte-accurate request parsing, cache decision, response write
 - `src/main/java/org/project/cacheclient/CacheClient.java`
   - Calls origin server (GET/POST), forwards selected headers/body, builds raw HTTP response bytes, injects `X-Cache` header safely
 - `src/main/java/org/project/cache/CacheStore.java`
@@ -53,6 +54,7 @@ Arguments:
 
 - `--port`: local proxy port
 - `--origin`: upstream base URL
+- `--cache-max-size`: max in-memory entries for LRU cache (example: `200`)
 - `--cacheable-post-paths`: comma-separated POST paths that are cacheable (example: `/posts,/search`)
 
 ## Logging
@@ -68,17 +70,18 @@ Example log line:
 ## How It Works
 
 1. Client connects to proxy and sends request line.
-2. Proxy extracts request target path and builds cache key:
+2. Proxy parses request line/headers/body from socket input bytes.
+3. Proxy extracts request target path and builds cache key:
    - `GET`: `origin + path`
    - cacheable `POST`: `origin + path + "#body-sha256=<hash>"`
-3. If key exists in cache:
+4. If key exists in cache:
    - return cached response + `X-Cache: HIT`
-4. If key does not exist:
+5. If key does not exist:
    - fetch from origin
    - store full response bytes in cache
    - if cache exceeds max size, least-recently-used entry is evicted
    - return response + `X-Cache: MISS`
-5. Response bytes are streamed to socket output.
+6. Response bytes are streamed to socket output.
 
 ## Quick Validation
 
@@ -153,7 +156,7 @@ Expected `file` output to identify it as a PDF document.
 ## Notes and Limitations
 
 - Cache is in-memory only (no persistence across process restart).
-- LRU cache max size is currently fixed to `100` entries in code.
+- LRU cache max size is configurable with `--cache-max-size` (default `100`).
 - Cache key is `origin + path` for `GET`; cacheable `POST` adds SHA-256 hash of request body.
 - Request handling is minimal (primarily GET use case).
 - For upstream forwarding, currently forwards request body and selected headers (`content-type`, `accept`).
@@ -161,7 +164,7 @@ Expected `file` output to identify it as a PDF document.
 
 ## Next Improvements
 
-- Add TTL-based cache expiry and configurable cache max size (for example via CLI args)
+- Add TTL-based cache expiry
 - Stream-to-disk cache for very large payloads
 - Support more HTTP methods and request headers
 - Add cache and request metrics (hit ratio, latency, error rates)
