@@ -26,8 +26,8 @@ import java.util.Set;
  * Main entry point for the caching proxy server.
  *
  * <p>This application accepts inbound HTTP requests over a {@link ServerSocket}, forwards supported
- * requests to an origin server, and caches eligible responses in memory. Cache behavior includes LRU
- * eviction and optional POST-path allowlist support with request-body-hash cache keys.
+ * requests to an origin server, and caches eligible responses in memory. Cache behavior includes
+ * LRU eviction and optional POST-path allowlist support with request-body-hash cache keys.
  */
 public class CachingApplication {
     private static final Logger logger = LoggerFactory.getLogger(CachingApplication.class);
@@ -39,10 +39,11 @@ public class CachingApplication {
      * Starts the proxy server and runs the connection accept loop.
      *
      * <p>Supported CLI arguments:
+     *
      * <ul>
-     *   <li>{@code --port}: local port to bind</li>
-     *   <li>{@code --origin}: upstream origin base URL</li>
-     *   <li>{@code --cacheable-post-paths}: comma-separated POST paths eligible for caching</li>
+     *   <li>{@code --port}: local port to bind
+     *   <li>{@code --origin}: upstream origin base URL
+     *   <li>{@code --cacheable-post-paths}: comma-separated POST paths eligible for caching
      * </ul>
      *
      * @param args command line arguments
@@ -114,7 +115,8 @@ public class CachingApplication {
                 String cacheKey = buildCacheKey(origin, path, method, cacheable, requestBody);
                 boolean postBodyHashedKey = cacheable && "POST".equalsIgnoreCase(method);
                 logger.info(
-                        "request received method={} path={} cache_key={} cacheable={} request_body_bytes={} post_body_hashed_key={}",
+                        "request received method={} path={} cache_key={} cacheable={}"
+                            + " request_body_bytes={} post_body_hashed_key={}",
                         method,
                         path,
                         cacheKey,
@@ -171,7 +173,8 @@ public class CachingApplication {
      * @param method incoming HTTP method
      * @param path normalized request path
      * @param cacheablePostPaths configured POST allowlist
-     * @return {@code true} when request should participate in cache lookup/store; otherwise {@code false}
+     * @return {@code true} when request should participate in cache lookup/store; otherwise {@code
+     *     false}
      */
     private static boolean isCacheable(String method, String path, Set<String> cacheablePostPaths) {
         if ("GET".equalsIgnoreCase(method)) {
@@ -183,8 +186,8 @@ public class CachingApplication {
     /**
      * Builds a cache key for a request.
      *
-     * <p>GET requests use {@code origin + path}. Cacheable POST requests append a SHA-256 hash of the
-     * request body to avoid collisions across different payloads for the same endpoint.
+     * <p>GET requests use {@code origin + path}. Cacheable POST requests append a SHA-256 hash of
+     * the request body to avoid collisions across different payloads for the same endpoint.
      *
      * @param origin upstream origin URL
      * @param path normalized request path
@@ -231,8 +234,8 @@ public class CachingApplication {
     /**
      * Reads request body bytes based on {@code Content-Length}.
      *
-     * <p>If {@code Content-Length} is missing, invalid, or non-positive, an empty byte array is returned.
-     * Body text is decoded from chars and re-encoded as UTF-8 bytes for downstream usage.
+     * <p>If {@code Content-Length} is missing, invalid, or non-positive, an empty byte array is
+     * returned. Body text is decoded from chars and re-encoded as UTF-8 bytes for downstream usage.
      *
      * @param reader buffered reader positioned after headers
      * @param headers parsed request headers

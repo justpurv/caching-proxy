@@ -23,9 +23,7 @@ public class CacheClient {
     private final HttpClient client;
     private static final byte[] HEADER_SEPARATOR = new byte[] {'\r', '\n', '\r', '\n'};
 
-    /**
-     * Creates a cache client with default connect timeout configuration.
-     */
+    /** Creates a cache client with default connect timeout configuration. */
     public CacheClient() {
         client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     }
@@ -56,7 +54,11 @@ public class CacheClient {
      * @throws InterruptedException when request thread is interrupted
      */
     public byte[] getResponse(
-            String origin, String path, String method, byte[] requestBody, Map<String, String> headers)
+            String origin,
+            String path,
+            String method,
+            byte[] requestBody,
+            Map<String, String> headers)
             throws IOException, InterruptedException {
         HttpRequest.Builder requestBuilder =
                 HttpRequest.newBuilder()
@@ -71,7 +73,8 @@ public class CacheClient {
 
         copyForwardableHeaders(requestBuilder, headers);
         HttpRequest request = requestBuilder.build();
-        HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        HttpResponse<InputStream> response =
+                client.send(request, HttpResponse.BodyHandlers.ofInputStream());
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         // status line
         String statusLine = "HTTP/1.1 " + response.statusCode() + "\r\n";
@@ -79,9 +82,7 @@ public class CacheClient {
         // headers
         for (Map.Entry<String, List<String>> header : response.headers().map().entrySet()) {
             String headerLine =
-                    header.getKey() + ": " +
-                            String.join(",", header.getValue()) +
-                            "\r\n";
+                    header.getKey() + ": " + String.join(",", header.getValue()) + "\r\n";
             output.write(headerLine.getBytes(StandardCharsets.ISO_8859_1));
         }
         // end headers
@@ -99,7 +100,8 @@ public class CacheClient {
      * @param requestBuilder target request builder
      * @param headers source headers map
      */
-    private void copyForwardableHeaders(HttpRequest.Builder requestBuilder, Map<String, String> headers) {
+    private void copyForwardableHeaders(
+            HttpRequest.Builder requestBuilder, Map<String, String> headers) {
         if (headers == null || headers.isEmpty()) {
             return;
         }
@@ -138,7 +140,8 @@ public class CacheClient {
         }
 
         byte[] cacheHeader = ("\r\nX-Cache: " + value).getBytes(StandardCharsets.ISO_8859_1);
-        ByteArrayOutputStream output = new ByteArrayOutputStream(response.length + cacheHeader.length);
+        ByteArrayOutputStream output =
+                new ByteArrayOutputStream(response.length + cacheHeader.length);
         output.write(response, 0, headerIndex);
         output.write(cacheHeader, 0, cacheHeader.length);
         output.write(response, headerIndex, response.length - headerIndex);

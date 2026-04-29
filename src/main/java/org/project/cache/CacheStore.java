@@ -6,8 +6,8 @@ import java.util.Map;
 /**
  * Thread-safe in-memory byte-response cache with LRU eviction.
  *
- * <p>Internally uses an access-order {@link LinkedHashMap} and evicts the least recently used
- * entry when the configured maximum size is exceeded.
+ * <p>Internally uses an access-order {@link LinkedHashMap} and evicts the least recently used entry
+ * when the configured maximum size is exceeded.
  */
 public class CacheStore {
 
@@ -16,9 +16,7 @@ public class CacheStore {
     private final int maxSize;
     private final Map<String, byte[]> cache;
 
-    /**
-     * Creates a cache store with default maximum capacity.
-     */
+    /** Creates a cache store with default maximum capacity. */
     public CacheStore() {
         this(DEFAULT_MAX_SIZE);
     }
@@ -34,12 +32,13 @@ public class CacheStore {
             throw new IllegalArgumentException("maxSize must be greater than 0");
         }
         this.maxSize = maxSize;
-        this.cache = new LinkedHashMap<>(16, 0.75f, true) {
-            @Override
-            protected boolean removeEldestEntry(Map.Entry<String, byte[]> eldest) {
-                return size() > CacheStore.this.maxSize;
-            }
-        };
+        this.cache =
+                new LinkedHashMap<>(16, 0.75f, true) {
+                    @Override
+                    protected boolean removeEldestEntry(Map.Entry<String, byte[]> eldest) {
+                        return size() > CacheStore.this.maxSize;
+                    }
+                };
     }
 
     /**
@@ -78,9 +77,7 @@ public class CacheStore {
         }
     }
 
-    /**
-     * Removes all entries from cache.
-     */
+    /** Removes all entries from cache. */
     public void clear() {
         synchronized (cache) {
             cache.clear();
