@@ -44,6 +44,20 @@ It now supports binary-safe responses (for example JSON, images, PDFs) by handli
 mvn clean test
 ```
 
+## Package
+
+Build runtime artifacts (application classes + runtime dependencies in `target/lib`):
+
+```bash
+mvn clean package
+```
+
+Then run through the launcher script:
+
+```bash
+./bin/caching-proxy --port 8080 --origin https://httpbin.org
+```
+
 ## Run
 
 ```bash
@@ -56,6 +70,13 @@ Arguments:
 - `--origin`: upstream base URL
 - `--cache-max-size`: max in-memory entries for LRU cache (example: `200`)
 - `--cacheable-post-paths`: comma-separated POST paths that are cacheable (example: `/posts,/search`)
+- `--clear-cache`: clear cache and exit
+
+Example clear-cache command:
+
+```bash
+./bin/caching-proxy --clear-cache
+```
 
 ## Logging
 
