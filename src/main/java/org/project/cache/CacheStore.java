@@ -83,4 +83,34 @@ public class CacheStore {
             cache.clear();
         }
     }
+
+    /**
+     * Returns current number of cached entries.
+     *
+     * @return current cache size
+     */
+    public int size() {
+        synchronized (cache) {
+            return cache.size();
+        }
+    }
+
+    /**
+     * Returns configured maximum number of cache entries.
+     *
+     * @return cache max size
+     */
+    public int maxSize() {
+        return maxSize;
+    }
+
+    /**
+     * Returns remaining entry capacity before next eviction.
+     *
+     * @return available cache slots (never negative)
+     */
+    public int availableSlots() {
+        int available = maxSize() - size();
+        return Math.max(available, 0);
+    }
 }

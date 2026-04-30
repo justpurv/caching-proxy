@@ -32,6 +32,7 @@ public class CachingApplication {
     private static final Logger logger = LoggerFactory.getLogger(CachingApplication.class);
     private static final String CACHEABLE_POST_PATHS_ARG = "--cacheable-post-paths";
     private static final String CACHE_MAX_SIZE_ARG = "--cache-max-size";
+    private static final String CLEAR_CACHE_ARG = "--clear-cache";
     private static final String PORT = "--port";
     private static final String ORIGIN = "--origin";
 
@@ -52,6 +53,7 @@ public class CachingApplication {
         int port = 0;
         String origin = null;
         int cacheMaxSize = 100;
+        boolean clearCacheRequested = false;
         Set<String> cacheablePostPaths = Collections.emptySet();
         CacheClient client = new CacheClient();
 
@@ -68,8 +70,16 @@ public class CachingApplication {
             if (CACHE_MAX_SIZE_ARG.equals(args[i]) && i + 1 < args.length) {
                 cacheMaxSize = parseCacheMaxSize(args[i + 1]);
             }
+            if (CLEAR_CACHE_ARG.equals(args[i])) {
+                clearCacheRequested = true;
+            }
         }
         CacheStore store = new CacheStore(cacheMaxSize);
+        if (clearCacheRequested) {
+            store.clear();
+            logger.info("cache cleared");
+            return;
+        }
         logger.info(
                 "starting proxy server port={} origin={} cacheable_post_paths={} cache_max_size={}",
                 port,
@@ -93,12 +103,14 @@ public class CachingApplication {
                 String requestLine = readLine(clientInput);
                 if (requestLine == null || requestLine.isBlank()) {
                     logger.warn("empty request line");
+                    logCacheCapacity(store);
                     continue;
                 }
                 String[] parts = requestLine.trim().split("\\s+");
                 if (parts.length < 2) {
                     logger.warn("malformed request line request_line={}", requestLine);
                     writeSimpleResponse(socket.getOutputStream(), 400, "Bad Request");
+                    logCacheCapacity(store);
                     continue;
                 }
                 Map<String, String> headers = readHeaders(clientInput);
@@ -112,6 +124,7 @@ public class CachingApplication {
                             parts[1],
                             invalidRequestTarget);
                     writeSimpleResponse(socket.getOutputStream(), 400, "Bad Request");
+                    logCacheCapacity(store);
                     continue;
                 }
                 boolean cacheable = isCacheable(method, path, cacheablePostPaths);
@@ -153,6 +166,7 @@ public class CachingApplication {
                                 path,
                                 upstreamFailure);
                         writeSimpleResponse(socket.getOutputStream(), 502, "Bad Gateway");
+                        logCacheCapacity(store);
                         continue;
                     }
                 }
@@ -162,6 +176,7 @@ public class CachingApplication {
                     responseStream.transferTo(outputStream);
                 }
                 outputStream.flush();
+                logCacheCapacity(store);
             } catch (IOException e) {
                 logger.error("proxy request handling failed", e);
             }
@@ -407,6 +422,19 @@ public class CachingApplication {
             return uri.getRawQuery() == null ? path : path + "?" + uri.getRawQuery();
         }
         return requestTarget;
+    }
+
+    /**
+     * Logs current LRU cache capacity snapshot.
+     *
+     * @param store cache store instance
+     */
+    private static void logCacheCapacity(CacheStore store) {
+        logger.info(
+                "lru cache capacity cache_size={} cache_max_size={} cache_available_slots={}",
+                store.size(),
+                store.maxSize(),
+                store.availableSlots());
     }
 
     /**
